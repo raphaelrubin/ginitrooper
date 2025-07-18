@@ -1,0 +1,11 @@
+-------------------------
+-- ASSET_TO_COLLATERAL --
+-------------------------
+-- CI START FOR ALL TAPES
+-- Drop View
+drop view AMC.TAPE_ASSET_TO_COLLATERAL_FINISH;
+-- View erstellen
+create or replace view AMC.TAPE_ASSET_TO_COLLATERAL_FINISH as
+    select CUT_OFF_DATE, COLLATERAL_ID, ASSET_ID, BRANCH, CREATED_USER, CREATED_TIMESTAMP
+    from AMC.TABLE_ASSET_TO_COLLATERAL_CURRENT;
+-- CI END FOR ALL TAPES

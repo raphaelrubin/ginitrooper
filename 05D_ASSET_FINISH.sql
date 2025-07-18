@@ -1,0 +1,29 @@
+-----------
+-- ASSET --
+-----------
+-- CI START FOR ALL TAPES
+-- Drop View
+drop view AMC.TAPE_ASSET_FINISH;
+-- View erstellen
+create or replace view AMC.TAPE_ASSET_FINISH as
+    select CUT_OFF_DATE,
+           ASSET_ID,
+           ASSET_TYPE,
+           ASSET_DESCRIPTION,
+           BRANCH,
+           NOMINAL_VALUE_EUR as VO_NOMINAL_VALUE_EUR,
+           NOMINAL_VALUE_OC as VO_NOMINAL_VALUE_OC,
+           NOMINAL_VALUE_CURRENCY as VO_NOMINAL_ORIGINAL_CURRENCY,
+           ASSET_VALUE_EUR as VO_ANZUS_VALUE_EUR,
+           ASSET_VALUE_OC as VO_ANZUS_VALUE_OC,
+           ASSET_VALUE_CURRENCY as VO_ANZUS_ORIGINAL_CURRENCY,
+           LTV_LIMIT_1_PERCENT as VO_BELEIHSATZ1_P,
+           VO_KUST,
+           VO_VOE,
+           VO_CRR_KZ,
+           BUILDING_TYPE as VO_GEBAEUDE_KZ,
+           COVER_STOCK_RELEVANCE as VO_DECKUNGSKZ_TXS,
+           CREATED_USER,
+           CREATED_TIMESTAMP
+    from AMC.TABLE_ASSET_CURRENT;
+-- CI END FOR ALL TAPES

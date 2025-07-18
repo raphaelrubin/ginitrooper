@@ -1,0 +1,453 @@
+--------------------------------------
+-- ASSETS/COLLATERALS / PROTECTIONS --
+--------------------------------------
+-- Modellierung für EZB-Dictionary
+
+drop view CALC.VIEW_COLLATERALIZATION_PROTECTION;
+create or replace view CALC.VIEW_COLLATERALIZATION_PROTECTION as
+with
+EndColl as (
+    select P2I.CUT_OFF_DATE,
+           P2I.FACILITY_ID,
+           P2I.PROTECTION_ID, -- COLLATERAL_ID
+           P2I.PROTECTION_ALLOCATED_VALUE,
+           P2I.THIRD_PARTY_PRIORITY_CLAIMS,
+           P2I.TYPE,
+           P2I.SAP_KUNDE,
+           F001,
+           ACC111,
+           B436,
+           C223,
+           COL120,
+           COL123,
+           COL214,
+           CRI103,
+           CRI113,
+           CRI114,
+           CRI115,
+           CRI159,
+           D554,
+           IDN203,
+           M012,
+           MAT106,
+           MAT126,
+           VAD014,
+           VAD015,
+           VAD279,
+           VAL006,
+           VAL010,
+           VAL125,
+           VAL230,
+           PARTNER_ID30,
+           QUELLE,
+           BRANCH
+    from CALC.SWITCH_COLLATERALIZATION_PROTECTION_TO_INSTRUMENT_CURRENT P2I
+    left join NLB.ABACUS_POSITION_CURRENT AP on P2I.PROTECTION_ID = AP.POSITION_ID
+    where Type = 'COLLATERAL'
+),
+Assets as (
+    select P2I.CUT_OFF_DATE,
+           P2I.FACILITY_ID,
+           P2I.PROTECTION_ID, -- ASSET_ID
+           P2I.PROTECTION_ALLOCATED_VALUE,
+           P2I.THIRD_PARTY_PRIORITY_CLAIMS,
+           P2I.TYPE,
+           P2I.SAP_KUNDE,
+           COL120,
+           COL123,
+           COL124,
+           COL214,
+           CTY010,
+           CUR007,
+           IDN203,
+           MAT126,
+           P038,
+           VAL125,
+           QUELLE,
+           BRANCH
+    from CALC.SWITCH_COLLATERALIZATION_PROTECTION_TO_INSTRUMENT_CURRENT P2I
+    left join NLB.ABACUS_OBJECT_CURRENT AO on P2I.PROTECTION_ID = AO.OBJECT_ID
+    where Type = 'ASSET'
+),
+Union_EA as (
+    select CUT_OFF_DATE, FACILITY_ID, PROTECTION_ID, PROTECTION_ALLOCATED_VALUE, THIRD_PARTY_PRIORITY_CLAIMS, TYPE, SAP_KUNDE, F001, COL120, COL123, null as COL124, COL214, null as CTY010, null as CUR007, IDN203, MAT126, null as P038, VAL125, QUELLE, BRANCH, ACC111, B436, C223, CRI103, CRI113, CRI114, CRI115, CRI159, D554,  M012, MAT106,  VAD014, VAD015, VAD279, VAL006, VAL010,  VAL230, PARTNER_ID30  from EndCOLL
+    union all
+    select CUT_OFF_DATE, FACILITY_ID, PROTECTION_ID, PROTECTION_ALLOCATED_VALUE, THIRD_PARTY_PRIORITY_CLAIMS, TYPE, SAP_KUNDE, null as F001, COL120, COL123, COL124, COL214, CTY010, CUR007, IDN203, MAT126, P038, VAL125, QUELLE, BRANCH, null as ACC111, null as B436, null as C223, null as CRI103, null as CRI113, null as CRI114, null as CRI115, null as CRI159, null as D554, null as M012, null as MAT106, null as VAD014, null as VAD015, null as VAD279, null as VAL006, null as VAL010, null as VAL230, null as PARTNER_ID30 from Assets
+),
+--PROTECTIONS ABACUS
+PROTECTION_ALL as (
+    select distinct EA.CUT_OFF_DATE, EA.PROTECTION_ID
+          from Union_EA as EA
+),
+SPOT_LOANTAPE_DATA as (
+    select PA.CUT_OFF_DATE,
+           PA.PROTECTION_ID,
+           LTA.DT_APPRSL_PRVS,
+           LTA.DT_LST_FLL_APPRSL,
+           LTA.APPRSL_CRRNCY,
+           LTA.RL_ESTT_CTY,
+           LTA.RL_ESTT_PST_CD,
+           case when LTA.CNSTRCTN_STTS >=100 then 1
+                when LTA.CNSTRCTN_STTS < 100 then 2
+           end as CNSTRCTN_STTS,
+           LTA.DT_FRST_USG,
+           LTA.RL_ESTT_ADDRSS,
+           LTA.RL_ESTT_CLLTRL_LCTN_INT,
+           LTA.PRTCTN_VL_NPE,
+           LTA.NTNL_ID,
+           LTP.TYP_PRTCTN_INTRNL
+    from PROTECTION_ALL PA
+    left join NLB.SPOT_LOANTAPE_PROTECTION_CURRENT LTP
+        on LTP.SAPFDB_ID = PA.PROTECTION_ID
+    left join NLB.SPOT_LOANTAPE_ASSET_CURRENT LTA
+        on LTA.SAPFDB_ID = PA.PROTECTION_ID
+),
+ADDITIONAL_CALC as (
+    Select
+    A.PROTECTION_ID, -- ASSET_ID
+    A.FACILITY_ID,
+    NVL(A.COL214,P.COL214) as COL214,
+    AI.PARTNER_ID30,
+    AI.C207
+    from Assets A
+    left join NLB.ABACUS_POSITION_TO_OBJECT PO
+        on (PO.CUT_OFF_DATE, left(PO.OBJECT_ID1,34)) = (A.CUT_OFF_DATE, A.PROTECTION_ID)
+    left join NLB.ABACUS_INSTRUMENT_CURRENT AI
+        on (A.CUT_OFF_DATE, PO.POSITION_ID1) = (AI.CUT_OFF_DATE,AI.INSTRUMENT_ID)
+    left join NLB.ABACUS_POSITION_CURRENT P
+        on (PO.CUT_OFF_DATE, PO.POSITION_ID1) = (P.CUT_OFF_DATE,P.POSITION_ID)
+),
+ADDITIONAL_CALC_GRP_WERT as (
+    Select
+    PROTECTION_ID,
+    max(COL214) as MAX_WERT
+    from ADDITIONAL_CALC
+    where COL214 > 0
+    group by PROTECTION_ID
+),
+ADDITIONAL_CALC_FINAL_C207 as (
+    Select
+    PROTECTION_ID,
+    max(C207) as C207
+    from ADDITIONAL_CALC
+    group by PROTECTION_ID
+),
+ADDITIONAL_CALC_FINAL_PARTNER as (
+    select
+    AC.PROTECTION_ID,
+    max(PARTNER_ID30) as PARTNER_ID30
+    from ADDITIONAL_CALC_GRP_WERT ACGN
+    inner join ADDITIONAL_CALC AC on ACGN.MAX_WERT = AC.COL214
+    group by AC.PROTECTION_ID
+),
+ASSETS_IWHS_CMS as (
+    select distinct CUT_OFF_DATE,SAPFDB_ID, ASSET_TYPE, ASSET_DESCRIPTION, PRTCTN_VL,SOURCE from (
+        select A.CUT_OFF_DATE,
+               M.SAPFDB_ID,
+               ASSET_TYPE,
+               ASSET_DESCRIPTION,
+               NOMINAL_VALUE_EUR as PRTCTN_VL,
+               A.SOURCE
+        from CALC.SWITCH_ASSET_CURRENT A
+        inner join NLB.SPOT_LOANTAPE_PROTECTION_ASSET_CURRENT M
+            on (M.CUT_OFF_DATE, M.CMS_ID) = (A.CUT_OFF_DATE, A.ASSET_ID)
+        where SOURCE like '%CMS%'
+        union all
+        select A.CUT_OFF_DATE,
+               M.SAPFDB_ID,
+               ASSET_TYPE,
+               ASSET_DESCRIPTION,
+               NOMINAL_VALUE_EUR as PRTCTN_VL,
+               A.SOURCE
+        from CALC.SWITCH_ASSET_CURRENT A
+        inner join NLB.SPOT_LOANTAPE_PROTECTION_ASSET_CURRENT M
+            on (M.CUT_OFF_DATE, M.VVS_NR) = (A.CUT_OFF_DATE, A.ASSET_ID)
+        where SOURCE like '%IWHS%'
+    )
+),
+ASSETS_MN_PRPS as (
+    select A.*, PMP.ECB_CODE as MN_PRPS from ASSETS_IWHS_CMS as A
+    left join SMAP.ECB_PROTECTION_MAIN_PURPOSE PMP
+        on (A.ASSET_TYPE||','||A.ASSET_DESCRIPTION) = (PMP.NLB_VALUE)
+),
+Standalone_COLL_IWHS_CMS as (
+    select distinct CUT_OFF_DATE,SAPFDB_ID, PRTCTN_VL, SOURCE from (
+        select C.CUT_OFF_DATE,
+               M.SAPFDB_ID,
+               C.NOMINAL_VALUE_EUR as PRTCTN_VL,
+               C.SOURCE
+        from CALC.SWITCH_COLLATERAL_CURRENT C
+            LEFT JOIN CALC.SWITCH_ASSET_TO_COLLATERAL_CURRENT A2C
+            ON C.COLLATERAL_ID = A2C.COLLATERAL_ID
+        inner join NLB.SPOT_LOANTAPE_PROTECTION_ASSET_CURRENT M
+            on (M.CUT_OFF_DATE, M.CMS_ID) = (C.CUT_OFF_DATE, C.COLLATERAL_ID)
+        where A2C.Asset_ID Is Null and C.SOURCE like'%CMS%'
+        union all
+        select C.CUT_OFF_DATE,
+               M.SAPFDB_ID,
+               C.NOMINAL_VALUE_EUR PRTCTN_VL,
+               C.SOURCE
+        from CALC.SWITCH_COLLATERAL_CURRENT C
+            LEFT JOIN CALC.SWITCH_ASSET_TO_COLLATERAL_CURRENT A2C
+            ON C.COLLATERAL_ID = A2C.COLLATERAL_ID
+        inner join NLB.SPOT_LOANTAPE_PROTECTION_ASSET_CURRENT M
+            on (M.CUT_OFF_DATE, M.SIRE_ID) = (C.CUT_OFF_DATE, C.COLLATERAL_ID)
+        where A2C.Asset_ID Is Null and C.SOURCE = 'IWHS'
+    )
+),
+PROTECTION_REX_CMS_IWHS as (
+    select IWHS_CMS.*,
+           REX.PRM_LCTN,
+           REX.APPRSR,
+           REX.CRE_YRLY_INCM,
+           REX.CRE_YRLY_EXPNSS,
+           REX.CRE_INCM_CRRNCY,
+           REX.DVLPMNT_STTS
+    from CALC.SWITCH_ASSET_REX_CURRENT as REX
+    left join (
+        select A.CUT_OFF_DATE,
+               A.SAPFDB_ID as PRTCTN_ID,
+               A.PRTCTN_VL,
+               A.MN_PRPS,
+               A.SOURCE
+        from ASSETS_MN_PRPS A
+        union all
+        select SC.CUT_OFF_DATE,
+               SC.SAPFDB_ID as PRTCTN_ID,
+               SC.PRTCTN_VL,
+               null as MN_PRPS,
+               SC.SOURCE
+        from Standalone_COLL_IWHS_CMS as SC
+        ) as IWHS_CMS on (IWHS_CMS.CUT_OFF_DATE, IWHS_CMS.PRTCTN_ID) = (REX.CUT_OFF_DATE,REX.ASSET_ID)
+),
+TMP_PROTECTION as (
+    select distinct
+    EA.CUT_OFF_DATE,
+    EA.FACILITY_ID,
+    SLD.PROTECTION_ID as PRTCTN_ID,
+    EA.TYPE as protectionType,
+    EA.SAP_KUNDE as SAP_KUNDE,
+    EA.F001,
+    trim(regexp_replace(UCASE(EA.COL120),'[A-ZÄÖÜß()\-\.\! ]','')) as COL120, --ART_DER_SICHERHEIT
+    trim(regexp_replace(UCASE(EA.COL123),'[A-ZÄÖÜß()\-\.\! ]','')) as COL123, --ART_DES_WERTES_DER_SICHERHEIT
+    trim(regexp_replace(UCASE(NVL(EA.COL124,AI.COL124)),'[A-ZÄÖÜß()\-\.\! ]','')) as COL124, --ANSATZ_DER_SICHERHEITENBEWERTUNG
+    EA.COL214 as PRTCTN_VL, --WERT_DER_SICHERHEIT
+    EA.CTY010,
+    EA.CUR007,
+    EA.IDN203, --SICHERHEITENKENNUNG
+    EA.MAT126, --DATUM_DES_URSPRUENGLICHEN_WERTES_DER_SICHERHEIT
+    EA.P038,
+    EA.VAL125, --URSPR_WERT_DER_SICHERHEIT
+    NVL(ACFC.C207,AI.C207) as C207, --Laufzeitende des Kontraktes bzw. Endfälligkeit des Wertp
+    NVL(ACFP.PARTNER_ID30, AI.PARTNER_ID30) as PARTNER_ID30,  --PARTNER_ID_ALLGEMEINE_GEGENPARTEI
+    ADM.ADR015, --BELEGENHEITSORT_DER_IMMOBILIENSICHERHEIT
+    ADM.ADR015_NEVS,
+    --SPOT Daten
+    SLD.DT_APPRSL_PRVS,
+    SLD.DT_LST_FLL_APPRSL,
+    SLD.APPRSL_CRRNCY,
+    SLD.RL_ESTT_CTY,
+    SLD.RL_ESTT_PST_CD,
+    SLD.CNSTRCTN_STTS,
+    SLD.DT_FRST_USG,
+    SLD.RL_ESTT_ADDRSS,
+    SLD.RL_ESTT_CLLTRL_LCTN_INT,
+    SLD.PRTCTN_VL_NPE,
+    SLD.NTNL_ID,
+    SLD.TYP_PRTCTN_INTRNL,
+    RCI.MN_PRPS,
+    RCI.PRM_LCTN,
+    RCI.APPRSR,
+    RCI.CRE_YRLY_INCM,
+    RCI.CRE_YRLY_EXPNSS,
+    RCI.CRE_INCM_CRRNCY,
+    RCI.DVLPMNT_STTS
+    from SPOT_LOANTAPE_DATA SLD
+    left join Union_EA as EA
+        on (EA.CUT_OFF_DATE, EA.PROTECTION_ID) = (SLD.CUT_OFF_DATE,SLD.PROTECTION_ID)
+    left join ADDITIONAL_CALC_FINAL_PARTNER ACFP
+        on (EA.PROTECTION_ID) = (ACFP.PROTECTION_ID)
+    left join ADDITIONAL_CALC_FINAL_C207 ACFC
+        on (EA.PROTECTION_ID) = (ACFC.PROTECTION_ID)
+    left join NLB.ABACUS_INSTRUMENT_CURRENT AI
+        on (EA.CUT_OFF_DATE, EA.PROTECTION_ID) = (AI.CUT_OFF_DATE,AI.INSTRUMENT_ID)
+    left join NLB.ABACUS_DM_AC_PRTCTN_CURRENT ADM
+        on (EA.CUT_OFF_DATE,left(EA.IDN203,34)) = (ADM.CUT_OFF_DATE,left(ADM.IDN203,34))
+    left join PROTECTION_REX_CMS_IWHS RCI
+        on (EA.CUT_OFF_DATE, EA.PROTECTION_ID) = (RCI.CUT_OFF_DATE,RCI.PRTCTN_ID)
+),
+PROTECTION as (
+    select TMP_P.CUT_OFF_DATE,
+           TMP_P.PRTCTN_ID,
+           TMP_P.PARTNER_ID30 as PRTCTN_PRVDR_ID,
+           ECB_PT.ECB_CODE as TYP_PRTCTN,
+           TMP_P.MAT126 as DT_ORGNL_PRTCTN_VL,
+           TMP_P.P038 as DT_PRTCTN_VL,
+           TMP_P.VAL125 as ORGNL_PRTCTN_VL,
+           ECB_PVA.ECB_CODE as PRTCTN_VLTN_APPRCH,
+           TMP_P.C207 as DT_MTRTY_PRTCTN,
+           TMP_P.PRTCTN_VL as PRTCTN_VL,
+           TMP_P.ADR015 as RL_ESTT_CLLTRL_LCTN,
+           ECB_PVT.ECB_CODE as TYP_PRTCTN_VL,
+           --SPOT Daten
+           TMP_P.DT_APPRSL_PRVS,
+           TMP_P.DT_LST_FLL_APPRSL,
+           TMP_P.APPRSL_CRRNCY,
+           TMP_P.RL_ESTT_CTY,
+           TMP_P.RL_ESTT_PST_CD,
+           TMP_P.CNSTRCTN_STTS,
+           TMP_P.DT_FRST_USG,
+           TMP_P.RL_ESTT_ADDRSS,
+           TMP_P.RL_ESTT_CLLTRL_LCTN_INT,
+           TMP_P.PRTCTN_VL_NPE,
+           TMP_P.NTNL_ID,
+           TMP_P.TYP_PRTCTN_INTRNL,
+           TMP_P.MN_PRPS,
+           TMP_P.PRM_LCTN,
+           TMP_P.APPRSR,
+           TMP_P.CRE_YRLY_INCM,
+           TMP_P.CRE_YRLY_EXPNSS,
+           TMP_P.CRE_INCM_CRRNCY,
+           TMP_P.DVLPMNT_STTS
+    from TMP_PROTECTION as TMP_P
+    -- Mapping of NLB to ECB Values
+    left join SMAP.ECB_PROTECTION_VALUATION_APPROACH as ECB_PVA on TMP_P.COL124 = ECB_PVA.NLB_VALUE
+    left join SMAP.ECB_PROTECTION_PROTECTION_VALUE_TYPE as ECB_PVT on TMP_P.COL123 = ECB_PVT.NLB_VALUE
+    left join SMAP.ECB_PROTECTION_PROTECTION_TYPE as ECB_PT on TMP_P.COL120 = ECB_PT.NLB_VALUE
+),
+data as (
+select
+    -- General
+    P.DT_MTRTY_PRTCTN as MATURITY_DATE, --DT_MTRTY_PRTCTN,
+    P.CUT_OFF_DATE as CUT_OFF_DATE, --DT_RFRNC,
+    P.NTNL_ID as NATIONAL_ID, --NTNL_ID,
+    P.PRTCTN_ID as PROTECTION_ID, --PRTCTN_ID,
+    P.PRTCTN_PRVDR_ID as PROTECTION_PROVIDER_ID, --PRTCTN_PRVDR_ID,
+    P.RL_ESTT_ADDRSS as ADDRESS, --RL_ESTT_ADDRSS,
+    P.RL_ESTT_CLLTRL_LCTN as COLLATERAL_LOCATION, --RL_ESTT_CLLTRL_LCTN,
+    P.RL_ESTT_CLLTRL_LCTN_INT as ASSET_LOCATION, --RL_ESTT_CLLTRL_LCTN_INT,
+    P.RL_ESTT_CTY as CITY, --RL_ESTT_CTY,
+    P.RL_ESTT_PST_CD as POST_CODE, --RL_ESTT_PST_CD,
+    -- Classification
+    NULL as MARKET_VALUE_HAIRCUT, --HRCT_MV,
+    NULL as PROTECTION_IS_CALLED, --PRTCTN_CLLD,
+    P.TYP_PRTCTN as PROTECTION_TYPE, --TYP_PRTCTN,
+    P.TYP_PRTCTN_INTRNL as PROTECTION_TYPE_INTERNAL, --TYP_PRTCTN_INTRNL,
+    P.TYP_PRTCTN_VL as PROTECTION_VALUE_TYPE, --TYP_PRTCTN_VL,
+    -- Appraisal
+    P.APPRSL_CRRNCY as APPRAISAL_CURRENCY, --APPRSL_CRRNCY,
+    P.APPRSR as APPRAISER, --APPRSR,
+    P.DT_LST_FLL_APPRSL as LAST_FULL_APPRAISAL_DATE, --DT_LST_FLL_APPRSL,
+    P.DT_ORGNL_PRTCTN_VL as ORIGINAL_PROTECTION_VALUE_DATE, --DT_ORGNL_PRTCTN_VL,
+    P.DT_PRTCTN_VL as PROTECTION_VALUE_DATE, --DT_PRTCTN_VL,
+    P.ORGNL_PRTCTN_VL as ORIGINAL_PROTECTION_VALUE, --ORGNL_PRTCTN_VL,
+    NULL as FORCED_SALE_VALUE, --PRTCTN_FRCD_SL_VL,
+    P.PRTCTN_VL as APPRAISED_MARKET_VALUE, --PRTCTN_VL,
+    P.PRTCTN_VL_NPE as APPRAISED_MARKET_VALUE_NONPERFORMING, --PRTCTN_VL_NPE,
+    P.PRTCTN_VLTN_APPRCH as VALUATION_APPROACH, --PRTCTN_VLTN_APPRCH,
+    P.DT_APPRSL_PRVS as APPRAISAL_DATE_PREVIOUS, --DT_APPRSL_PRVS,
+    NULL as APPRAISED_MARKET_VALUE_PREVIOUS, --PRTCTN_VL_PRVS,
+    -- Collateral Features
+    P.CNSTRCTN_STTS as CONSTRUCTION_STATUS, --CNSTRCTN_STTS,
+    NULL as CONSTRUCTION_STATUS_DATE, --DT_CNSTRCTN_STTS,
+    P.DT_FRST_USG as FIRST_USAGE_DATE, --DT_FRST_USG,
+    P.DVLPMNT_STTS as DEVELOPMENT_STATUS, --DVLPMNT_STTS,
+    P.MN_PRPS as MAIN_PURPOSE, --MN_PRPS,
+    P.PRM_LCTN as IS_PRIME_LOCATION, --PRM_LCTN,
+    -- Financial Information
+    P.CRE_INCM_CRRNCY as INCOME_CURRENCY, --CRE_INCM_CRRNCY,
+    P.CRE_YRLY_EXPNSS as OPERATING_EXPENSES_YEARLY, --CRE_YRLY_EXPNSS,
+    P.CRE_YRLY_INCM as INCOME_YEARLY, --CRE_YRLY_INCM,
+    -- Covid 19
+    --NULL as PRTCTN_TYP_PBLC_GRNT_SCHM_C19,
+    -- Optional
+    NULL as ADD_NMRC1,
+    NULL as ADD_NMRC2,
+    NULL as ADD_NMRC3,
+    NULL as ADD_NMRC4,
+    NULL as ADD_DT1,
+    NULL as ADD_DT2,
+    NULL as ADD_DT3,
+    NULL as ADD_TXT1,
+    NULL as ADD_TXT2,
+    NULL as ADD_TXT3
+from PROTECTION P
+)
+select distinct
+    nullif(cast(MATURITY_DATE as DATE),null) as MATURITY_DATE, --DT_MTRTY_PRTCTN,
+    cast(CUT_OFF_DATE as DATE) as CUT_OFF_DATE, --DT_RFRNC,
+    nullif(cast(NATIONAL_ID as VARCHAR(255)),null) as NATIONAL_ID, --NTNL_ID,
+    nullif(cast(PROTECTION_ID as VARCHAR(60)),null) as PROTECTION_ID, --PRTCTN_ID,
+    nullif(cast(PROTECTION_PROVIDER_ID as VARCHAR(50)),null) as PROTECTION_PROVIDER_ID, --PRTCTN_PRVDR_ID,
+    nullif(cast(ADDRESS as VARCHAR(255)),null) as ADDRESS, --RL_ESTT_ADDRSS,
+    nullif(cast(COLLATERAL_LOCATION as VARCHAR(255)),null) as COLLATERAL_LOCATION, --RL_ESTT_CLLTRL_LCTN,
+    nullif(cast(ASSET_LOCATION as VARCHAR(255)),null) as ASSET_LOCATION, --RL_ESTT_CLLTRL_LCTN_INT,
+    nullif(cast(CITY as VARCHAR(255)),null) as CITY, --RL_ESTT_CTY,
+    nullif(cast(POST_CODE as VARCHAR(255)),null) as POST_CODE, --RL_ESTT_PST_CD,
+    nullif(cast(MARKET_VALUE_HAIRCUT as DOUBLE),null) as MARKET_VALUE_HAIRCUT, --HRCT_MV,
+    nullif(cast(PROTECTION_IS_CALLED as BOOLEAN),null) as PROTECTION_IS_CALLED, --PRTCTN_CLLD,
+    nullif(cast(PROTECTION_TYPE as BIGINT),null) as PROTECTION_TYPE, --TYP_PRTCTN,
+    nullif(cast(PROTECTION_TYPE_INTERNAL as VARCHAR(255)),null) as PROTECTION_TYPE_INTERNAL, --TYP_PRTCTN_INTRNL,
+    nullif(cast(PROTECTION_VALUE_TYPE as BIGINT),null) as PROTECTION_VALUE_TYPE, --TYP_PRTCTN_VL,
+    nullif(cast(APPRAISAL_CURRENCY as VARCHAR(8)),null) as APPRAISAL_CURRENCY, --APPRSL_CRRNCY,
+    nullif(cast(APPRAISER as VARCHAR(255)),null) as APPRAISER, --APPRSR,
+    nullif(cast(LAST_FULL_APPRAISAL_DATE as DATE),null) as LAST_FULL_APPRAISAL_DATE, --DT_LST_FLL_APPRSL,
+    nullif(cast(ORIGINAL_PROTECTION_VALUE_DATE as DATE),null) as ORIGINAL_PROTECTION_VALUE_DATE, --DT_ORGNL_PRTCTN_VL,
+    nullif(cast(PROTECTION_VALUE_DATE as DATE),null) as PROTECTION_VALUE_DATE, --DT_PRTCTN_VL,
+    nullif(cast(ORIGINAL_PROTECTION_VALUE as DOUBLE),null) as ORIGINAL_PROTECTION_VALUE, --ORGNL_PRTCTN_VL,
+    nullif(cast(FORCED_SALE_VALUE as DOUBLE),null) as FORCED_SALE_VALUE, --PRTCTN_FRCD_SL_VL,
+    nullif(cast(APPRAISED_MARKET_VALUE as DOUBLE),null) as APPRAISED_MARKET_VALUE, --PRTCTN_VL,
+    nullif(cast(APPRAISED_MARKET_VALUE_NONPERFORMING as DOUBLE),null) as APPRAISED_MARKET_VALUE_NONPERFORMING, --PRTCTN_VL_NPE,
+    nullif(cast(VALUATION_APPROACH as BIGINT),null) as VALUATION_APPROACH, --PRTCTN_VLTN_APPRCH,
+    nullif(cast(APPRAISAL_DATE_PREVIOUS as DATE),null) as APPRAISAL_DATE_PREVIOUS, --DT_APPRSL_PRVS,
+    nullif(cast(APPRAISED_MARKET_VALUE_PREVIOUS as DOUBLE),null) as APPRAISED_MARKET_VALUE_PREVIOUS, --PRTCTN_VL_PRVS,
+    nullif(cast(CONSTRUCTION_STATUS as BIGINT),null) as CONSTRUCTION_STATUS, --CNSTRCTN_STTS,
+    nullif(cast(CONSTRUCTION_STATUS_DATE as DATE),null) as CONSTRUCTION_STATUS_DATE, --DT_CNSTRCTN_STTS,
+    nullif(cast(FIRST_USAGE_DATE as DATE),null) as FIRST_USAGE_DATE, --DT_FRST_USG,
+    nullif(cast(DEVELOPMENT_STATUS as BIGINT),null) as DEVELOPMENT_STATUS, --DVLPMNT_STTS,
+    nullif(cast(MAIN_PURPOSE as BIGINT),null) as MAIN_PURPOSE, --MN_PRPS,
+    nullif(cast(IS_PRIME_LOCATION as BOOLEAN),null) as IS_PRIME_LOCATION, --PRM_LCTN,
+    nullif(cast(INCOME_CURRENCY as VARCHAR(8)),null) as INCOME_CURRENCY, --CRE_INCM_CRRNCY,
+    nullif(cast(OPERATING_EXPENSES_YEARLY as DOUBLE),null) as OPERATING_EXPENSES_YEARLY, --CRE_YRLY_EXPNSS,
+    nullif(cast(INCOME_YEARLY as DOUBLE),null) as INCOME_YEARLY, --CRE_YRLY_INCM,
+    --nullif(cast(PRTCTN_TYP_PBLC_GRNT_SCHM_C19 as BOOLEAN), null) as PRTCTN_TYP_PBLC_GRNT_SCHM_C19,
+    nullif(cast(ADD_NMRC1 as DOUBLE),null) as ADD_NMRC1,
+    nullif(cast(ADD_NMRC2 as DOUBLE),null) as ADD_NMRC2,
+    nullif(cast(ADD_NMRC3 as DOUBLE),null) as ADD_NMRC3,
+    nullif(cast(ADD_NMRC4 as DOUBLE),null) as ADD_NMRC4,
+    nullif(cast(ADD_DT1 as DATE),null) as ADD_DT1,
+    nullif(cast(ADD_DT2 as DATE),null) as ADD_DT2,
+    nullif(cast(ADD_DT3 as DATE),null) as ADD_DT3,
+    nullif(cast(ADD_TXT1 as VARCHAR(255)),null) as ADD_TXT1,
+    nullif(cast(ADD_TXT2 as VARCHAR(255)),null) as ADD_TXT2,
+    nullif(cast(ADD_TXT3 as VARCHAR(255)),null) as ADD_TXT3,
+    USER as CREATED_USER,
+    CURRENT_TIMESTAMP as CREATED_TIMESTAMP
+from data;
+------------------------------------------------------------------------------------------------------------------------
+
+-- CI START FOR ALL TAPES
+
+-- Current-Tabelle erstellen
+------------------------------------------------------------------------------------------------------------------------
+call STG.TEST_PROC_BACKUP_AND_DROP('AMC','TABLE_COLLATERALIZATION_PROTECTION_CURRENT');
+create table AMC.TABLE_COLLATERALIZATION_PROTECTION_CURRENT like CALC.VIEW_COLLATERALIZATION_PROTECTION distribute by hash(PROTECTION_ID) in SPACE_AMC_A,SPACE_AMC_B,SPACE_AMC_C,SPACE_AMC_D,SPACE_AMC_E,SPACE_AMC_F;
+create index AMC.INDEX_COLLATERALIZATION_PROTECTION_CURRENT_PROTECTION_ID on AMC.TABLE_COLLATERALIZATION_PROTECTION_CURRENT (PROTECTION_ID);
+call STG.TEST_PROC_LOAD_AND_DROP_BACKUP_FOR('AMC','TABLE_COLLATERALIZATION_PROTECTION_CURRENT');
+------------------------------------------------------------------------------------------------------------------------
+
+-- Archiv-Tabelle erstellen
+------------------------------------------------------------------------------------------------------------------------
+call STG.TEST_PROC_BACKUP_AND_DROP('AMC','TABLE_COLLATERALIZATION_PROTECTION_ARCHIVE');
+create table AMC.TABLE_COLLATERALIZATION_PROTECTION_ARCHIVE like CALC.VIEW_COLLATERALIZATION_PROTECTION distribute by hash(PROTECTION_ID) partition by RANGE (CUT_OFF_DATE) (starting '1.1.2015' ending '31.12.2030' EVERY 1 Month) in SPACE_AMC_A,SPACE_AMC_B,SPACE_AMC_C,SPACE_AMC_D,SPACE_AMC_E,SPACE_AMC_F;
+create index AMC.INDEX_COLLATERALIZATION_PROTECTION_ARCHIVE_PROTECTION_ID on AMC.TABLE_COLLATERALIZATION_PROTECTION_ARCHIVE (PROTECTION_ID);
+call STG.TEST_PROC_LOAD_AND_DROP_BACKUP_FOR('AMC','TABLE_COLLATERALIZATION_PROTECTION_ARCHIVE');
+------------------------------------------------------------------------------------------------------------------------
+
+-- CI END FOR ALL TAPES
+
+-- SWITCHES erstellen
+------------------------------------------------------------------------------------------------------------------------
+call STG.TEST_PROC_DROP_AND_CREATE_SWITCH('AMC','TABLE_COLLATERALIZATION_PROTECTION_CURRENT');
+call STG.TEST_PROC_DROP_AND_CREATE_SWITCH('AMC','TABLE_COLLATERALIZATION_PROTECTION_ARCHIVE');
+------------------------------------------------------------------------------------------------------------------------
