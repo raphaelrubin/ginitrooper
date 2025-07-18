@@ -1,0 +1,9 @@
+------------------------------------------
+-- KREDITRISIKO_BANKANALYSER_VOR_KERMIT --
+------------------------------------------
+-- CI START FOR ALL TAPES
+-- Drop View
+drop view AMC.TAPE_KREDITRISIKO_BANKANALYSER_VOR_KERMIT_FINISH;
+-- View erstellen
+create or replace view AMC.TAPE_KREDITRISIKO_BANKANALYSER_VOR_KERMIT_FINISH AS select * from AMC.TABLE_KREDITRISIKO_BANKANALYSER_VOR_KERMIT_CURRENT;
+-- CI END FOR ALL TAPES

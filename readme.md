@@ -1,0 +1,191 @@
+# Portfolio
+
+Portfolio ist die Basis für alle Tapes bestehend aus KR Zulieferung und SPOT Erweiterung. Hier stehen Kunden und
+Konten, welche für das Tape relevant sind, also alle Konten von Kunden aus dem entsprechenden Bereich (z.B. Schiffe/
+Flugzeuge für AMC). Hier werden auch alternative Kunden- und Kontennummern gesammelt.
+
+
+
+## Konten Grundgesamtheit
+
+Als erstes wird eine Liste mit allen gewünschten Konten erstellt. Dazu sammeln 
+wir die Manuelle Kontenliste und die Konten aus der KR-GG ein und berechnen 
+alternative Kontonummern wie z.B. CBB Equivalente oder Nachfolgekonten.
+Dies geschieht in DESIRED_FACILITIES.
+
+
+```mermaid
+graph TB
+
+  subgraph "Konten Grundgesamtheit"
+  SubGraph1DF(AMC.TABLE_PORTFOLIO_DESIRED_FACILITIES_CURRENT)
+  SubGraph1GG(AMC.TABLE_BASIC_SELECTION)
+  SubGraph1FMA(AMC.TABLE_FACILITY_MANUAL_ADDITION)
+  CALC.VIEW_PORTFOLIO_DESIRED_FACILITIES -- insert --> SubGraph1DF
+  SubGraph1GG --> CALC.VIEW_PORTFOLIO_DESIRED_FACILITIES
+  SubGraph1FMA --> CALC.VIEW_PORTFOLIO_DESIRED_FACILITIES
+  CALC.VIEW_SURROGATE --> CALC.VIEW_PORTFOLIO_DESIRED_FACILITIES
+  CALC.VIEW_FACILITY_CBB_TO_NLB --> CALC.VIEW_PORTFOLIO_DESIRED_FACILITIES
+  SMAP.TABLE_FACILITY_INSTITUTSFUSION --> CALC.VIEW_PORTFOLIO_DESIRED_FACILITIES
+  end
+
+```
+
+```mermaid
+graph TB
+
+  subgraph "Konten Grundgesamtheit Alt"
+  SubGraph1DF(AMC.TABLE_PORTFOLIO_EXISTING_FACILITIES_CURRENT)
+  SubGraph1PA(AMC.TABLE_PORTFOLIO_ARCHIVE)
+  CALC.VIEW_PORTFOLIO_EXISTING_FACILITIES -- insert --> SubGraph1DF
+  SubGraph1PA --> CALC.VIEW_PORTFOLIO_EXISTING_FACILITIES
+  CALC.VIEW_SURROGATE --> CALC.VIEW_PORTFOLIO_EXISTING_FACILITIES
+  CALC.VIEW_FACILITY_CBB_TO_NLB --> CALC.VIEW_PORTFOLIO_EXISTING_FACILITIES
+  SMAP.TABLE_FACILITY_INSTITUTSFUSION --> CALC.VIEW_PORTFOLIO_EXISTING_FACILITIES
+  end
+
+```
+
+## Kunden Grundgesamtheit
+
+Im nächsten Schritt wird die Kunden Grundgesamtheit berechnet. Dazu wird 
+zunächst eine Liste aller Kunden zu der Konten Grundgesamtheit erstellt:
+
+```mermaid
+graph TB
+
+  SubGraph1DF --> CALC.VIEW_PORTFOLIO_CLIENTS_SPOT
+  SubGraph1DF --> CALC.VIEW_PORTFOLIO_CLIENTS_ALIS
+  SubGraph1DF --> CALC.VIEW_PORTFOLIO_CLIENTS_DERIVATE
+  SubGraph1DF --> CALC.VIEW_PORTFOLIO_CLIENTS_BW
+  SubGraph1DF --> CALC.VIEW_PORTFOLIO_CLIENTS_DLD
+  
+  SubGraph1DE --> CALC.VIEW_PORTFOLIO_CLIENTS_SPOT
+  SubGraph1DE --> CALC.VIEW_PORTFOLIO_CLIENTS_ALIS
+  SubGraph1DE --> CALC.VIEW_PORTFOLIO_CLIENTS_DERIVATE
+  SubGraph1DE --> CALC.VIEW_PORTFOLIO_CLIENTS_BW
+  SubGraph1DE --> CALC.VIEW_PORTFOLIO_CLIENTS_DLD
+
+  SubGraph1DF(AMC.TABLE_PORTFOLIO_DESIRED_FACILITIES_CURRENT)
+  SubGraph1DE(AMC.TABLE_PORTFOLIO_ARCHIVE)
+
+  subgraph "Alle Kunden zu Konten Finden"
+  SPOT[SPOT Quelltabellen] --> CALC.VIEW_PORTFOLIO_CLIENTS_SPOT
+  CALC.VIEW_PORTFOLIO_CLIENTS_SPOT -- insert --> CLIENTS_FROM_FACILITIES[CALC.VIEW_PORTFOLIO_CLIENTS_FROM_FACILITIES]
+  ALIS[ALIS Quelltabellen] --> CALC.VIEW_PORTFOLIO_CLIENTS_ALIS
+  CALC.VIEW_PORTFOLIO_CLIENTS_ALIS -- insert --> CLIENTS_FROM_FACILITIES
+  DERIVATE[DERIVATE Quelltabellen] --> CALC.VIEW_PORTFOLIO_CLIENTS_DERIVATE
+  CALC.VIEW_PORTFOLIO_CLIENTS_DERIVATE -- insert --> CLIENTS_FROM_FACILITIES
+  BW[BW Quelltabellen] --> CALC.VIEW_PORTFOLIO_CLIENTS_BW
+  CALC.VIEW_PORTFOLIO_CLIENTS_BW -- insert --> CLIENTS_FROM_FACILITIES
+  DLD[DLD Quelltabellen] --> CALC.VIEW_PORTFOLIO_CLIENTS_DLD
+  CALC.VIEW_PORTFOLIO_CLIENTS_DLD -- insert --> CLIENTS_FROM_FACILITIES
+  CLIENTS_FROM_FACILITIES -- insert --> KF_NU[AMC.TABLE_PORTFOLIO_CLIENTS_FROM_FACILITIES_CURRENT]
+end
+```
+
+Danach können alle Kundenlsiten und die OE Liste vereint werden. Auch hier 
+werden Alternative Darstellungen der Kunden identifiziert und mit aufgenommen.
+Dies geschieht in DESIRED_CLIENTS. Die Quellen dazu sind die KR Grundgesammtheit 
+(BASIC_SELECTION) sowie manuelle Listen (CLIENT_MANUAL_ADDITION). Alternative 
+Kundennummern befinden sich in GEKO_DOPPELKUNDEN, CLIENT_CBB_TO_NLB, SURROGATE 
+und FACILITY_CBB_TO_NLB.
+
+```mermaid
+graph TB
+
+  subgraph "Kunden Grundgesamtheit"
+  SubGraph1DC(AMC.TABLE_PORTFOLIO_DESIRED_CLIENTS_CURRENT)
+  SubGraph1GG(AMC.TABLE_BASIC_SELECTION)
+  SubGraph1CMA(AMC.TABLE_CLIENT_MANUAL_ADDITION)
+  SubGraph1KFNU(AMC.TABLE_PORTFOLIO_CLIENTS_FROM_FACILITIES_CURRENT)
+  AMC.VIEW_PORTFOLIO_DESIRED_CLIENTS -- insert --> SubGraph1DC
+  SubGraph1CMA --> AMC.VIEW_PORTFOLIO_DESIRED_CLIENTS
+  CALC.VIEW_GEKO_DOPPELKUNDEN --> AMC.VIEW_PORTFOLIO_DESIRED_CLIENTS
+  CALC.VIEW_CLIENT_CBB_TO_NLB --> AMC.VIEW_PORTFOLIO_DESIRED_CLIENTS
+  SubGraph1KFNU --> AMC.VIEW_PORTFOLIO_DESIRED_CLIENTS
+  SubGraph1GG --> AMC.VIEW_PORTFOLIO_DESIRED_CLIENTS
+  end
+
+```
+
+
+
+## Alle Konten Finden
+
+```mermaid
+graph TB
+
+  SubGraph1DC[AMC.TABLE_PORTFOLIO_DESIRED_CLIENTS_CURRENT] --> CALC.VIEW_PORTFOLIO_SPOT
+  SubGraph1DC --> CALC.VIEW_PORTFOLIO_ALIS
+  SubGraph1DC --> CALC.VIEW_PORTFOLIO_DERIVATE
+  SubGraph1DC --> CALC.VIEW_PORTFOLIO_BW
+  SubGraph1DC --> CALC.VIEW_PORTFOLIO_DLD
+
+  subgraph "Alle Konten Finden"
+  SPOT[SPOT Quelltabellen] --> CALC.VIEW_PORTFOLIO_SPOT
+  CALC.VIEW_PORTFOLIO_SPOT -- insert --> PORTFOLIO_SPOT[AMC.TABLE_PORTFOLIO_SPOT_CURRENT]
+  PORTFOLIO_SPOT --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE
+  ALIS[ALIS Quelltabellen] --> CALC.VIEW_PORTFOLIO_ALIS
+  CALC.VIEW_PORTFOLIO_ALIS -- insert --> PORTFOLIO_ALIS[AMC.TABLE_PORTFOLIO_ALIS_CURRENT]
+  PORTFOLIO_ALIS --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE
+  DERIVATE[DERIVATE Quelltabellen] --> CALC.VIEW_PORTFOLIO_DERIVATE
+  CALC.VIEW_PORTFOLIO_DERIVATE -- insert --> PORTFOLIO_DERIVATE[AMC.TABLE_PORTFOLIO_DERIVATE_CURRENT]
+  PORTFOLIO_DERIVATE --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE
+  BW[BW Quelltabellen] --> CALC.VIEW_PORTFOLIO_BW
+  CALC.VIEW_PORTFOLIO_BW -- insert --> PORTFOLIO_BW[AMC.TABLE_PORTFOLIO_BW_CURRENT]
+  PORTFOLIO_BW --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE
+  DLD[DLD Quelltabellen] --> CALC.VIEW_PORTFOLIO_DLD
+  CALC.VIEW_PORTFOLIO_DLD -- insert --> PORTFOLIO_DLD[AMC.TABLE_PORTFOLIO_DLD_CURRENT]
+  PORTFOLIO_DLD --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE
+  CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE -- insert --> KF_NU[AMC.TABLE_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE_CURRENT]
+end
+```
+
+Im zweiten Schritt wird die Kunden GG gegen die einzelnen Quellsysteme gejoint um alle Konten der Kunden zu finden.
+Quellsysteme sind:
+
+- SPOT
+- ALIS
+- DERIVATE
+- BW
+- DLD
+
+## Konten vereinheitlichen
+
+```mermaid
+graph TB
+
+  SubGraph1DF(AMC.TABLE_PORTFOLIO_DESIRED_FACILITIES_CURRENT) --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES
+  KF_NU(AMC.TABLE_PORTFOLIO_KNOWN_FACILITIES_NON_UNIQUE_CURRENT) --> CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES
+
+  subgraph "Konten vereinheitlichen"
+
+  KF(AMC.TABLE_PORTFOLIO_KNOWN_FACILITIES_CURRENT)
+  CALC.VIEW_PORTFOLIO_KNOWN_FACILITIES -- insert --> KF
+end
+```
+
+Im dritten Schritt werden die Konten von allen Quellsystemen vereint. Wenn ein Konto mehrfach vorkommt, wird die
+Variante aus dem bevorzugten Quellsystem genommen. Außerdem wird über einen Join mit DESIRED_FACILITIES bestimmt, ob ein
+Konto besonders markiert werden soll oder nicht. Am Ende liegt eine Liste aller für den aktuellen Stichtag bekannter
+Konten der relevanten Kunden vor.
+
+## Konten vererben
+
+```mermaid
+graph TB
+
+  KF(AMC.TABLE_PORTFOLIO_KNOWN_FACILITIES_CURRENT) --> CALC.VIEW_PORTFOLIO_INHERITANCE
+  PORTFOLIO_A(AMC.TABLE_PORTFOLIO_ARCHIVE) --> CALC.VIEW_PORTFOLIO_INHERITANCE
+
+  subgraph "Konten vererben"
+  PI(AMC.TABLE_PORTFOLIO_INHERITANCE_CURRENT)
+  CALC.VIEW_PORTFOLIO_INHERITANCE -- insert --> PI
+end
+```
+
+Im vierten Schritt werden die Konten aus anderen Stichtagen mit hinzugezogen. EY braucht Das Konto auch nach dem es
+geschlossen wurde mindestens einen Stichtag (7 sind momentan gewünscht) und 1 Stichtag bevor es eröffnet wurde.
+
+
